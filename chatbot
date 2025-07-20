@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Gemini AI</title>
+    <!-- Memuat Tailwind CSS untuk styling yang modern dan responsif -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Menggunakan font Inter untuk tampilan yang bersih */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Kustomisasi scrollbar agar lebih modern */
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: #1f2937; /* bg-gray-800 */
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #4b5563; /* bg-gray-600 */
+            border-radius: 3px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; /* bg-gray-500 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+
+    <div id="chat-container" class="w-full max-w-2xl h-[90vh] flex flex-col bg-gray-800 rounded-2xl shadow-2xl border border-gray-700">
+        <!-- Header Chat -->
+        <header class="bg-gray-900 p-4 rounded-t-2xl border-b border-gray-700 flex items-center space-x-3">
+            <div class="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2V4a2 2 0 012-2h8a2 2 0 012 2v4z" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold">Chatbot Gemini AI</h1>
+                <p class="text-sm text-green-400">Online</p>
+            </div>
+        </header>
+
+        <!-- Jendela Chat -->
+        <div id="chat-window" class="flex-1 p-6 overflow-y-auto scrollbar-thin">
+            <!-- Pesan akan ditambahkan di sini oleh JavaScript -->
+        </div>
+
+        <!-- Indikator Mengetik -->
+        <div id="loading-indicator" class="p-6 hidden">
+            <div class="flex items-center space-x-2">
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style="animation-delay: 0.2s;"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style="animation-delay: 0.4s;"></div>
+                <span class="text-sm text-gray-400">Gemini sedang mengetik...</span>
+            </div>
+        </div>
+        
+        <!-- Input Pesan -->
+        <form id="message-form" class="p-4 bg-gray-900 rounded-b-2xl border-t border-gray-700">
+            <div class="flex items-center bg-gray-700 rounded-lg">
+                <input type="text" id="message-input" placeholder="Ketik pesan Anda di sini..." class="flex-1 bg-transparent p-3 text-white placeholder-gray-400 focus:outline-none">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-r-lg transition-colors duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                    </svg>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // --- Seleksi Elemen DOM ---
+        const chatWindow = document.getElementById('chat-window');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const loadingIndicator = document.getElementById('loading-indicator');
+
+        // --- Riwayat Percakapan untuk Konteks ---
+        let chatHistory = [];
+
+        // --- Fungsi untuk Menambah Pesan ke Jendela Chat ---
+        function addMessage(sender, text) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('mb-4', 'flex', 'flex-col');
+
+            let formattedText = text.replace(/\n/g, '<br>');
+
+            if (sender === 'user') {
+                messageElement.classList.add('items-end');
+                messageElement.innerHTML = `
+                    <div class="bg-blue-600 text-white p-3 rounded-l-lg rounded-br-lg max-w-md">
+                        <p>${formattedText}</p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Anda</p>
+                `;
+            } else {
+                messageElement.classList.add('items-start');
+                messageElement.innerHTML = `
+                    <div class="bg-gray-700 text-white p-3 rounded-r-lg rounded-bl-lg max-w-md">
+                        <p>${formattedText}</p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Gemini</p>
+                `;
+            }
+            chatWindow.appendChild(messageElement);
+            // Auto-scroll ke pesan terbaru
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        // --- Fungsi untuk Memanggil Gemini API ---
+        async function getGeminiResponse(prompt) {
+            // Menambahkan pesan pengguna ke riwayat untuk menjaga konteks
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+            const payload = {
+                contents: chatHistory,
+                // Optional: Konfigurasi keamanan dan generasi
+                generationConfig: {
+                    temperature: 0.7,
+                    topK: 1,
+                    topP: 1,
+                    maxOutputTokens: 2048,
+                },
+            };
+
+            // API Key dibiarkan kosong karena akan di-handle oleh lingkungan AI Studio
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                // Ekstraksi teks respons dengan aman
+                const botResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (botResponseText) {
+                    // Menambahkan respons bot ke riwayat
+                    chatHistory.push({ role: "model", parts: [{ text: botResponseText }] });
+                    return botResponseText;
+                } else {
+                    return "Maaf, saya tidak menerima respons yang valid. Coba lagi.";
+                }
+
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                // Menghapus pesan pengguna terakhir dari riwayat jika API gagal
+                chatHistory.pop(); 
+                return "Maaf, terjadi kesalahan saat menghubungi AI. Silakan coba lagi nanti.";
+            }
+        }
+
+        // --- Event Listener untuk Form Pengiriman Pesan ---
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Mencegah form dari reload halaman
+            const userInput = messageInput.value.trim();
+
+            if (userInput === "") return; // Jangan kirim jika input kosong
+
+            addMessage('user', userInput);
+            messageInput.value = ''; // Kosongkan input field
+            loadingIndicator.classList.remove('hidden'); // Tampilkan indikator loading
+
+            const botResponse = await getGeminiResponse(userInput);
+            
+            loadingIndicator.classList.add('hidden'); // Sembunyikan indikator loading
+            addMessage('bot', botResponse);
+        });
+
+        // --- Pesan Selamat Datang Saat Pertama Kali Dibuka ---
+        window.addEventListener('load', () => {
+            addMessage('bot', 'Halo! Saya adalah chatbot yang didukung oleh Gemini AI. Ada yang bisa saya bantu hari ini?');
+        });
+    </script>
+</body>
+</html>
